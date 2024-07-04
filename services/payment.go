@@ -8,8 +8,6 @@ import (
 
 	"cashapp/models"
 	"cashapp/repository"
-
-	"gorm.io/gorm"
 )
 
 type paymentLayer struct {
@@ -38,13 +36,13 @@ func (p *paymentLayer) SendMoney(req core.CreatePaymentRequest) core.Response {
 		Purpose:     models.Transfer,
 	}
 
-	err := p.repository.Transactions.SQLTransaction(func(tx *gorm.DB) error {
-		return p.repository.Transactions.Create(tx, &fromTrans)
-	})
+	// err := p.repository.Transactions.SQLTransaction(func(tx *gorm.DB) error {
+	// 	return p.repository.Transactions.Create(tx, &fromTrans)
+	// })
 
-	if err != nil {
-		return core.Error(err, nil)
-	}
+	// if err != nil {
+	// 	return core.Error(err, nil)
+	// }
 
 	if err := p.processor.ProcessTransaction(fromTrans); err != nil {
 		return core.Error(err, nil)
