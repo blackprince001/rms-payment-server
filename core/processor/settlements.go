@@ -3,92 +3,76 @@ package processor
 import (
 	"cashapp/core/currency"
 	"cashapp/models"
-	"errors"
+
 	"fmt"
 
 	"gorm.io/gorm"
 )
 
-func (p *Processor) MoveMoneyBetweenWallets(fromTrans models.Transaction) (*models.Transaction, *models.Transaction, error) {
+func (p *Processor) DepositMoneyToProvider(fromTrans models.Transaction) error {
+	// Assume we have a service to interact with the payment provider
+	providerService := p.Repo.Provider
 
-	originWallet, err := p.Repo.Wallets.FindPrimaryWallet(fromTrans.From)
+	// Request deposit from the payment provider
+	depositResult, err := providerService.RequestDeposit(fromTrans.From, fromTrans.Amount)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find primary wallet for origin. %v", err)
+		return fmt.Errorf("failed to request deposit from provider: %v", err)
 	}
 
-	destinationWallet, err := p.Repo.Wallets.FindPrimaryWallet(fromTrans.To)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find primary wallet for destination. %v", err)
-	}
-
-	balance, err := p.Repo.TransactionEvents.GetWalletBalance(originWallet.ID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load balance. %v", err)
-	}
-
-	if balance < fromTrans.Amount {
-		return nil, nil, errors.New("insufficient balance")
-	}
-
+	// Create a transaction record
 	toTrans := models.Transaction{
 		From:        fromTrans.From,
 		To:          fromTrans.To,
-		Ref:         fromTrans.Ref,
+		Ref:         depositResult.ProviderReference, // Use reference from provider
 		Amount:      currency.ConvertCedisToPessewas(fromTrans.Amount),
 		Description: fromTrans.Description,
 		Direction:   models.Incoming,
 		Status:      models.Pending,
-		Purpose:     models.Transfer,
+		Purpose:     models.Deposit,
 	}
 
 	err = p.Repo.Transactions.SQLTransaction(func(tx *gorm.DB) error {
-		return p.Repo.Transactions.Create(tx, &toTrans)
-	})
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create destination transaction. %v", err)
-	}
-
-	err = p.Repo.Transactions.SQLTransaction(func(tx *gorm.DB) error {
-		debit := models.TransactionEvent{
-			TransactionID: fromTrans.ID,
-			WalletID:      originWallet.ID,
-			Amount:        fromTrans.Amount,
-			Type:          models.Debit,
-		}
-
-		if err := p.Repo.TransactionEvents.Save(tx, &debit); err != nil {
-			return err
-		}
-
-		credit := models.TransactionEvent{
-			TransactionID: toTrans.ID,
-			WalletID:      destinationWallet.ID,
-			Amount:        toTrans.Amount,
-			Type:          models.Credit,
-		}
-
-		if err := p.Repo.TransactionEvents.Save(tx, &credit); err != nil {
-			return err
+		if err := p.Repo.Transactions.Create(tx, &toTrans); err != nil {
+			return fmt.Errorf("failed to create deposit transaction record: %v", err)
 		}
 
 		return nil
 	})
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("money movement failed. err=%v", err)
+		return fmt.Errorf("deposit failed: %v", err)
 	}
 
-	fromTrans.WalletID = originWallet.ID
-	toTrans.WalletID = destinationWallet.ID
-
-	return &fromTrans, &toTrans, nil
-}
-
-func (p *Processor) DepositMoneyIntoWallet(fromTrans models.Transaction) error {
 	return nil
 }
 
-func (p *Processor) WithdrawMoneyFromWallet(fromTrans models.Transaction) error {
+func (p *Processor) WithdrawMoneyFromProvider(fromTrans models.Transaction) error {
+	providerService := p.Repo.Provider
+
+	// Request withdrawal from the payment provider
+	withdrawalResult, err := providerService.RequestWithdrawal(fromTrans.From, fromTrans.Amount)
+	if err != nil {
+		return fmt.Errorf("failed to request withdrawal from provider: %v", err)
+	}
+
+	// Create a transaction record
+	fromTrans.Amount = currency.ConvertCedisToPessewas(fromTrans.Amount)
+	fromTrans.Direction = models.Outgoing
+	fromTrans.Status = models.Pending
+	fromTrans.Purpose = models.Withdrawal
+	fromTrans.Ref = withdrawalResult.ProviderReference // Use reference from provider
+
+	err = p.Repo.Transactions.SQLTransaction(func(tx *gorm.DB) error {
+		if err := p.Repo.Transactions.Create(tx, &fromTrans); err != nil {
+			return fmt.Errorf("failed to create withdrawal transaction record: %v", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("withdrawal failed: %v", err)
+	}
+
 	return nil
 }

@@ -7,15 +7,15 @@ import (
 type Repo struct {
 	Users             *userLayer
 	Transactions      *transactionLayer
+	Provider          *providerLayer
 	TransactionEvents *eventLayer
-	Wallets           *walletLayer
 }
 
 func NewRepository(db *gorm.DB) Repo {
 	return Repo{
 		Users:             newUserLayer(db),
 		Transactions:      newTransactionLayer(db),
-		Wallets:           newWalletLayer(db),
+		Provider:          newProviderLayer(db),
 		TransactionEvents: newEventLayer(db),
 	}
 

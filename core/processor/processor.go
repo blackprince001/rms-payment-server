@@ -22,25 +22,13 @@ func New(r repository.Repo) Processor {
 
 func (p *Processor) ProcessTransaction(fromTrans models.Transaction) error {
 	switch fromTrans.Purpose {
-	case models.Transfer:
-		f, t, err := p.MoveMoneyBetweenWallets(fromTrans)
-		if err != nil {
-			if err := p.FailureCallback(f, t, err); err != nil {
-				return fmt.Errorf("failed to complete transaction. %v", err)
-			}
-			return fmt.Errorf("money transfer failed. %v", err)
-		}
-		if err := p.SuccessCallback(f, t); err != nil {
-			return fmt.Errorf("failed to complete transaction. %v", err)
-		}
-
-	case models.Transfer:
-		if err := p.WithdrawMoneyFromWallet(fromTrans); err != nil {
-			return fmt.Errorf("money withdrawal failed. %v", err)
-		}
 	case models.Deposit:
-		if err := p.DepositMoneyIntoWallet(fromTrans); err != nil {
+		if err := p.DepositMoneyToProvider(fromTrans); err != nil {
 			return fmt.Errorf("money deposit failed. %v", err)
+		}
+	case models.Withdrawal:
+		if err := p.WithdrawMoneyFromProvider(fromTrans); err != nil {
+			return fmt.Errorf("money withdrawal failed. %v", err)
 		}
 	default:
 		log.Println("no handler for purpose. purpose=", fromTrans.Purpose)
