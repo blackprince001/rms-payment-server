@@ -36,22 +36,19 @@ func (p *Processor) ProcessTransaction(fromTrans models.Transaction) error {
 	return nil
 }
 
-func (p *Processor) SuccessCallback(fromTrans, toTrans *models.Transaction) error {
+func (p *Processor) SuccessCallback(fromTrans *models.Transaction) error {
 	fromTrans.Status = models.Success
-	toTrans.Status = models.Success
 
 	return p.Repo.Transactions.SQLTransaction(func(tx *gorm.DB) error {
-		return p.Repo.Transactions.Updates(tx, fromTrans, toTrans)
+		return p.Repo.Transactions.Updates(tx, fromTrans)
 	})
 }
 
-func (p *Processor) FailureCallback(fromTrans, toTrans *models.Transaction, err error) error {
+func (p *Processor) FailureCallback(fromTrans *models.Transaction, err error) error {
 	fromTrans.Status = models.Failed
-	toTrans.Status = models.Failed
 	fromTrans.FailureReason = err.Error()
-	toTrans.FailureReason = err.Error()
 
 	return p.Repo.Transactions.SQLTransaction(func(tx *gorm.DB) error {
-		return p.Repo.Transactions.Updates(tx, fromTrans, toTrans)
+		return p.Repo.Transactions.Updates(tx, fromTrans)
 	})
 }
